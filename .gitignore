@@ -1,0 +1,12 @@
+node_modules/
+npm-debug.log*
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Ignore build artifcacts except for userscript
+dist/*
+!dist/userscript/
+dist/userscript/*
+!dist/userscript/mountaineers-participant-insights.user.js

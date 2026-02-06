@@ -1,0 +1,25 @@
+{
+  "name": "mountaineers-participant-insights",
+  "friendlyName": "Mountaineers Participant Insights",
+  "description": "Provides Mountaineers leaders with participant statistics and notes.",
+  "matches": [
+    "https://www.mountaineers.org/*"
+  ],
+  "version": "0.10.0",
+  "author": "Daryl Harrison",
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:userscript && npm run build:extension",
+    "build:userscript": "vite build --mode userscript",
+    "build:extension": "vite build --mode extension && node generate-manifest.js && cp icon48.png dist/extension/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/darylharrison/mountaineers-participant-insights.git"
+  },
+  "keywords": [],
+  "devDependencies": {
+    "vite": "^5.4.11",
+    "vite-plugin-monkey": "^7.1.9"
+  }
+}

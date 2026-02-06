@@ -1,0 +1,25 @@
+
+// some fields are set by generate-manifest.js with values from package.json
+{
+  "manifest_version": 3,
+  "name": "",
+  "version": "",
+  "description": "",
+  "author": "",
+  "icons": {
+    "48": "icon48.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [],
+      "js": ["content-script.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/*.js", "extension-inject.js"],
+      "matches": []
+    }
+  ]
+}

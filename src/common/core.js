@@ -1,29 +1,14 @@
-// ==UserScript==
-// @name         Mountaineers Participant Insights
-// @version      0.10
-// @description  See README.md
-// @author       Daryl Harrison
-// @match        https://www.mountaineers.org/*
-// @icon         https://img.icons8.com/external-regular-kawalan-studio/48/external-calendar-cross-date-time-regular-kawalan-studio.png
-// @resource     microtipCss https://unpkg.com/microtip/microtip.css
-// @grant        GM_addStyle
-// @grant        GM_getResourceText
-// ==/UserScript==
+export const run = (window, workerUrl) => {
+    const $ = window.$; // Use jQuery that is already on the page, v1.12.4
 
-(() => {
-    'use strict';
-    /* global $ */
-
-    console.log('Mountaineers Participant Insights userscript loaded');
-
-    const $ = unsafeWindow.$; // Use jQuery that is already on the page, v1.12.4
+    console.log('Mountaineers Participant Insights loaded');
 
     let tasksQueue;
     let userDataWorker;
 
     // Check if current user is a Leader. Only leaders can access activity history and participation notes
     const isLeader = () => {
-        return unsafeWindow.UserVoice?.globalOptions.ticket_custom_fields["User Role"] === "Leader";
+        return window.UserVoice?.globalOptions?.ticket_custom_fields?.["User Role"] === "Leader";
     };
 
     const initPage = () => {
@@ -48,94 +33,7 @@
     const initWorker = () => {
         if (userDataWorker) return;
 
-        // Do the bulk of the work in a Worker to avoid making the page unresponsive
-        const userDataWorkerScript = `
-            const parseParticipationNotes = (html) => {
-                const participationNotes = [];
-                const rowRegex = /<tr[^>]*>([\\s\\S]*?)<\\/tr>/gi;
-                const oneYearAgo = new Date(new Date().getTime() - (365 * 24 * 60 * 60 * 1000));
-
-                let rowMatch;
-                while ((rowMatch = rowRegex.exec(html)) !== null) {
-                    const rowContent = rowMatch[1];
-                    const cellRegex = /<td[^>]*>([\\s\\S]*?)<\\/td>/gi;
-                    const cells = [];
-                    let cellMatch;
-                    while ((cellMatch = cellRegex.exec(rowContent)) !== null) {
-                        cells.push(cellMatch[1]);
-                    }
-                    
-                    if (cells.length === 6) {
-                        const rawDate = cells[0].replace(/<[^>]*>/g, '').trim();
-                        const firstDate = rawDate.split(' - ')[0]; // date might be a range
-                        const activityDate = new Date(firstDate);
-
-                        if (activityDate < oneYearAgo) {
-                            break; // Sorted descending, so we can stop
-                        }
-
-                        const note = cells[5].replace(/<[^>]*>/g, '').trim();
-                        if (note) {
-                            const title = cells[1].replace(/<[^>]*>/g, '').trim();
-                            participationNotes.push(rawDate + ' - ' + title + ': ' + note);
-                        }
-                    }
-                }
-                return participationNotes;
-            };
-
-            const calculateStats = (activities) => {
-                const validActivities = activities.filter(a => 
-                    a.category === 'trip' && 
-                    a.trip_results !== 'Canceled' && 
-                    a.result !== 'Waitlisted'
-                );
-
-                const getPeriodStats = (days) => {
-                    const cutoff = new Date(new Date().getTime() - (days * 24 * 60 * 60 * 1000));
-                    const periodActivities = validActivities.filter(a => {
-                        const date = new Date(a.start);
-                        return date >= cutoff;
-                    });
-                    
-                    const total = periodActivities.length;
-                    const canceled = periodActivities.filter(a => a.result === 'Canceled').length;
-                    const noShow = periodActivities.filter(a => a.result === 'No Show').length;
-                    
-                    return { canceled: canceled, noShow: noShow, total: total };
-                };
-
-                return { stats30: getPeriodStats(30), stats90: getPeriodStats(90), stats365: getPeriodStats(365) };
-            };
-
-            self.onmessage = async (e) => {
-                const username = e.data;
-                const historyUrl = 'https://www.mountaineers.org/members/' + username + '/member-activity-history.json';
-                const reviewsUrl = 'https://www.mountaineers.org/members/' + username + '/review-activities';
-                
-                try {
-                    const [historyResponse, reviewsResponse] = await Promise.all([fetch(historyUrl), fetch(reviewsUrl)]);
-
-                    const failedResponses = [historyResponse, reviewsResponse].filter(r => !r.ok);
-                    if (failedResponses.length) {
-                        const error = failedResponses.map(r => r.url + ": " + r.status + " " + r.statusText).join(', ');
-                        throw new Error("Failed to fetch data: " + error);
-                    }
-
-                    const result = {
-                        stats: calculateStats(await historyResponse.json()),
-                        participationNotes: parseParticipationNotes(await reviewsResponse.text()),
-                        calculatedAt: new Date().toISOString()
-                    };
-                    self.postMessage({ username: username, result: result });
-                    
-                } catch (err) {
-                    self.postMessage({ username: username, result: { error: err.message } });
-                }
-            };
-        `;
-
-        userDataWorker = new Worker(URL.createObjectURL(new Blob([userDataWorkerScript], { type: 'application/javascript' })));
+        userDataWorker = new Worker(workerUrl);
 
         userDataWorker.onmessage = (event) => {
             const { username, result } = event.data;
@@ -143,7 +41,7 @@
             if (!result.error) { // Cache result
                 try {
                     const dateKey = getLocalDateString();
-                    localStorage.setItem(`mountaineers_cancellations_${dateKey}_${username}`, JSON.stringify(result));
+                    window.localStorage.setItem(`mountaineers_cancellations_${dateKey}_${username}`, JSON.stringify(result));
                 } catch (_) { }
             }
 
@@ -156,21 +54,38 @@
         const todayKeyPrefix = `mountaineers_cancellations_${getLocalDateString()}_`;
         const prefix = 'mountaineers_cancellations_';
 
-        Object.keys(localStorage).forEach(key => {
+        Object.keys(window.localStorage).forEach(key => {
             if (key.startsWith(prefix) && !key.startsWith(todayKeyPrefix)) {
-                localStorage.removeItem(key);
+                window.localStorage.removeItem(key);
             }
         });
     };
 
     // Use Microtip library for tooltips
-    const injectStyles = () => {
-        GM_addStyle(GM_getResourceText("microtipCss"));
-        GM_addStyle(`
+    const injectStyles = async () => {
+        addStyleFromUrl('https://unpkg.com/microtip/microtip.css');
+        addStyle(`
             [aria-label][data-microtip-size]::after {
                 white-space: pre-wrap; // allow multiline tooltips
             }
         `);
+    };
+
+    const addStyle = (css) => {
+        window.$('<style>')
+            .prop('type', 'text/css')
+            .html(css)
+            .appendTo('head');
+    };
+
+    const addStyleFromUrl = (url) => {
+        window.$('<link>')
+            .appendTo('head')
+            .attr({
+                type: 'text/css', 
+                rel: 'stylesheet',
+                href: url
+            });
     };
 
     const getLocalDateString = () => {
@@ -223,7 +138,7 @@
         while (tasksQueue.length > 0) {
             const username = tasksQueue.shift();
             const localDate = getLocalDateString();
-            const cached = localStorage.getItem(`mountaineers_cancellations_${localDate}_${username}`);
+            const cached = window.localStorage.getItem(`mountaineers_cancellations_${localDate}_${username}`);
             if (cached) {
                 populateUserData(username, JSON.parse(cached), true);
             } else {
@@ -238,14 +153,14 @@
         initPage();
 
         // Create an interceptor for XHR requests for "/roster-tab"
-        const originalOpen = XMLHttpRequest.prototype.open;
-        XMLHttpRequest.prototype.open = function(method, url) {
+        const originalOpen = window.XMLHttpRequest.prototype.open;
+        window.XMLHttpRequest.prototype.open = function(method, url) {
             this._url = url;
             return originalOpen.apply(this, arguments);
         };
 
-        const originalSend = XMLHttpRequest.prototype.send;
-        XMLHttpRequest.prototype.send = function() {
+        const originalSend = window.XMLHttpRequest.prototype.send;
+        window.XMLHttpRequest.prototype.send = function() {
             if (this._url && this._url.endsWith('/roster-tab')) {
                 this.addEventListener('load', () => {
                     setTimeout(processRosterContacts, 500); // wait for DOM update
@@ -287,7 +202,7 @@
     };
 
     const processProfilePage = () => {
-        const profileMatch = location.pathname.match(/^\/members\/([^/]+)\/?$/);
+        const profileMatch = window.location.pathname.match(/^\/members\/([^/]+)\/?$/);
         if (!profileMatch || !profileMatch[1]) return;
         const username = profileMatch[1];
 
@@ -319,10 +234,7 @@
         `;
     };
 
-    $(() => {
-        if (!isLeader()) return;
-        processProfilePage();
-        processRosterTab();
-    });
-
-})();
+    if (!isLeader()) return;
+    processProfilePage();
+    processRosterTab();
+};
